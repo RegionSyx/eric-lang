@@ -1,0 +1,5 @@
+splitlines = split("\n")
+
+first(d) = index(d, 0)
+second(d) = index(d, 1)
+last(d) = index(d, sub(0, 1))

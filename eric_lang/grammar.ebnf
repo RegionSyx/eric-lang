@@ -1,0 +1,14 @@
+module = block, {EMPTY, block};
+block = stmt, {NEWLINE, stmt};
+stmt = expr, (["=", expr] | ["as", identifier]), [INDENT, module, DEDENT];
+expr = literal | 
+       list |
+       identifier, ["(", expr, {",", expr}, ")"];
+
+literal = int | str | bool;
+list = "(" expr, {",", expr}", [","] ")"
+int = ? [0-9]+ ?;
+str = ? " .* " ?;
+bool = "true" | "false"
+identifier = ? [a-zA-Z0-9_]+ ?;
+

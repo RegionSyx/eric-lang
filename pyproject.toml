@@ -1,0 +1,11 @@
+[project]
+name = "eric-lang"
+version = "0.0.1"
+authors = [{name="Eric Hurst", email="eric.hurst97@gmail.com" }]
+description = "My own langugae"
+readme = "README.md"
+dependencies = []
+requires-python = ">=3.7"
+
+[project.scripts]
+eric = "eric_lang:lang.main"
