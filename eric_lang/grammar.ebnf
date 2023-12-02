@@ -1,6 +1,6 @@
 module = block, {EMPTY, block};
 block = stmt, {NEWLINE, stmt};
-stmt = expr, (["=", expr] | ["as", identifier]), [INDENT, module, DEDENT];
+stmt = expr, (["=", expr] | {"|", expr} ["as", identifier]), [INDENT, module, DEDENT];
 expr = literal | 
        list |
        identifier, ["(", expr, {",", expr}, ")"];

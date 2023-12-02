@@ -73,7 +73,7 @@ def tokenize(input_string):
     lines = input_string.split("\n")
 
     # Regex to capture tokens within lines
-    line_token_pattern = re.compile(r'("[^"]*"|\w+|\(|\)|\=|\#)')
+    line_token_pattern = re.compile(r'("[^"]*"|\w+|\(|\)|\=|\#|\|)')
     paren_level = 0
 
     for line in lines:
@@ -117,6 +117,9 @@ def tokenize(input_string):
             if "#" in line_tokens:
                 line_tokens = line_tokens[: line_tokens.index("#")]
 
+            for i in range(len(line_tokens)):
+                if line_tokens[i] == "|":
+                    line_tokens[i] = "NEWLINE"
             tokens.extend(line_tokens)
 
             # ignore newlines when in parenthesis
