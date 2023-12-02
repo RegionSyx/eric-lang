@@ -355,18 +355,6 @@ class Interpreter:
                                     },
                                 )
                                 self.stack.append(result)
-                            case IdentifierNode("len"):
-                                data = self.stack.pop()
-                                self.stack.append(len(data))
-                            case IdentifierNode("slice"):
-                                end = self.stack.pop()
-                                start = self.stack.pop()
-                                data = self.stack.pop()
-                                self.stack.append(data[start:end])
-                            case IdentifierNode("div"):
-                                denom = self.stack.pop()
-                                numer = self.stack.pop()
-                                self.stack.append(numer // denom)
                             case IdentifierNode("stdin"):
                                 self.stack.append(sys.stdin.read().strip())
                             case IdentifierNode("split"):
@@ -381,88 +369,14 @@ class Interpreter:
                                 )
                             case IdentifierNode("int"):
                                 self.stack.append(int(self.stack.pop()))
-                            case IdentifierNode("max"):
-                                self.stack.append(max(self.stack.pop()))
                             case IdentifierNode("print"):
                                 print(self.stack[-1])
                             case IdentifierNode("sum"):
                                 self.stack.append(sum(self.stack.pop()))
-                            case IdentifierNode("sort"):
-                                self.stack.append(sorted(self.stack.pop()))
-                            case IdentifierNode("reverse"):
-                                self.stack.append(list(reversed(self.stack.pop())))
-                            case IdentifierNode("take"):
-                                n = self.stack.pop()
-                                self.stack.append(self.stack.pop()[:n])
-                            case IdentifierNode("intersect"):
-                                right = self.stack.pop()
-                                left = self.stack.pop()
-                                self.stack.append(tuple(set(left) & set(right)))
-                            case IdentifierNode("flatten"):
-                                data = self.stack.pop()
-                                self.stack.append(
-                                    tuple([x for item in data for x in item])
-                                )
                             case IdentifierNode("index"):
                                 i = self.stack.pop()
                                 data = self.stack.pop()
                                 self.stack.append(data[i])
-                            case IdentifierNode("batch"):
-                                n = self.stack.pop()
-                                data = self.stack.pop()
-                                self.stack.append(
-                                    tuple(
-                                        [
-                                            tuple(data[i : i + n])
-                                            for i in range(0, len(data), n)
-                                        ]
-                                    )
-                                )
-                            case IdentifierNode("range"):
-                                end = self.stack.pop()
-                                start = self.stack.pop()
-                                self.stack.append(tuple(range(start, end)))
-                            case IdentifierNode("issubset"):
-                                right = self.stack.pop()
-                                left = self.stack.pop()
-                                self.stack.append(set(left).issubset(set(right)))
-                            case IdentifierNode("or"):
-                                right = self.stack.pop()
-                                left = self.stack.pop()
-                                self.stack.append(left or right)
-                            case IdentifierNode("inc"):
-                                data = self.stack.pop()
-                                self.stack.append(data + 1)
-                            case IdentifierNode("sub"):
-                                b = self.stack.pop()
-                                a = self.stack.pop()
-                                self.stack.append(a - b)
-                            case IdentifierNode("add"):
-                                b = self.stack.pop()
-                                a = self.stack.pop()
-                                self.stack.append(a + b)
-                            case IdentifierNode("set"):
-                                item = self.stack.pop()
-                                index = self.stack.pop()
-                                data = list(self.stack.pop())
-                                data[index] = item
-                                self.stack.append(tuple(data))
-                            case IdentifierNode("append"):
-                                item = self.stack.pop()
-                                data = self.stack.pop()
-                                self.stack.append(data + (item,))
-                            case IdentifierNode("extend"):
-                                items = self.stack.pop()
-                                data = self.stack.pop()
-                                self.stack.append(data + items)
-                            case IdentifierNode("clamp"):
-                                right = self.stack.pop()
-                                left = self.stack.pop()
-                                data = self.stack.pop()
-                                self.stack.append(min([max([left, data]), right]))
-                            case IdentifierNode("list"):
-                                data = self.stack.pop()
-                                self.stack.append(list(data))
                             case _:
                                 raise NotImplementedError(expr)
 
