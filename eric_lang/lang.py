@@ -299,35 +299,39 @@ class Interpreter:
             case ExpressionNode(expr, args):
                 if isinstance(expr, LiteralNode):
                     return self.run(expr)
-
                 elif (expr,) in self.variables:
                     self.run(self.variables[(expr,)])
                 else:
                     args_as_literals = []
+                    top = None
+                    if self.stack:
+                        top = self.stack[-1]
                     for arg in args:
                         args_as_literals.append(LiteralNode(value=self.run(arg)))
 
-                    matching_vars = [
+                    matching_exact_vars = [
                         x
                         for x in self.variables
-                        if x[0] == expr  # and len(x) == len(args) + 1
+                        if x[0] == expr
+                        and all([isinstance(x, ExpressionNode) for x in x[1:]])
+                        and (len(x) == len(args) + 1 or len(x) == len(args) + 2)
                     ]
 
                     if (expr, *args_as_literals) in self.variables:
                         self.run(self.variables[(expr, *args_as_literals)])
-                    elif matching_vars:
-                        matching = matching_vars[0]
+                        for a in args_as_literals:
+                            self.stack.pop()
+                    elif matching_exact_vars:
+                        matching = matching_exact_vars[0]
                         func_vars = {}
-                        if len(matching[1:]) > len(args_as_literals):
-                            args_as_literals.insert(
-                                0, LiteralNode(value=self.stack.pop())
-                            )
-
+                        if len(matching[1:]) > len(args):
+                            args_as_literals.insert(0, LiteralNode(value=top))
                         for func_args, literal_arg in zip(
-                            matching[1:], args_as_literals
+                            reversed(matching[1:]), reversed(args_as_literals)
                         ):
                             func_vars[(func_args.expr,)] = literal_arg
                             self.stack.pop()
+
                         sub_interpretor = Interpreter(
                             {**self.variables, **func_vars}, self.stack
                         )
@@ -340,6 +344,17 @@ class Interpreter:
                                 pass
                             case IdentifierNode("_2"):
                                 self.stack.append(self.stack[-2])
+                            case IdentifierNode("pyeval"):
+                                code = self.stack.pop()
+                                result = eval(
+                                    code,
+                                    {
+                                        k[0].name: v.value
+                                        for k, v in self.variables.items()
+                                        if isinstance(v, LiteralNode)
+                                    },
+                                )
+                                self.stack.append(result)
                             case IdentifierNode("len"):
                                 data = self.stack.pop()
                                 self.stack.append(len(data))
@@ -352,9 +367,6 @@ class Interpreter:
                                 denom = self.stack.pop()
                                 numer = self.stack.pop()
                                 self.stack.append(numer // denom)
-                            case IdentifierNode("list"):
-                                data = self.stack.pop()
-                                self.stack.append(tuple(data))
                             case IdentifierNode("stdin"):
                                 self.stack.append(sys.stdin.read().strip())
                             case IdentifierNode("split"):
@@ -372,7 +384,7 @@ class Interpreter:
                             case IdentifierNode("max"):
                                 self.stack.append(max(self.stack.pop()))
                             case IdentifierNode("print"):
-                                print(self.stack.pop())
+                                print(self.stack[-1])
                             case IdentifierNode("sum"):
                                 self.stack.append(sum(self.stack.pop()))
                             case IdentifierNode("sort"):
@@ -425,6 +437,10 @@ class Interpreter:
                                 b = self.stack.pop()
                                 a = self.stack.pop()
                                 self.stack.append(a - b)
+                            case IdentifierNode("add"):
+                                b = self.stack.pop()
+                                a = self.stack.pop()
+                                self.stack.append(a + b)
                             case IdentifierNode("set"):
                                 item = self.stack.pop()
                                 index = self.stack.pop()
@@ -444,10 +460,9 @@ class Interpreter:
                                 left = self.stack.pop()
                                 data = self.stack.pop()
                                 self.stack.append(min([max([left, data]), right]))
-                            case IdentifierNode("join"):
-                                delimiter = self.stack.pop()
+                            case IdentifierNode("list"):
                                 data = self.stack.pop()
-                                self.stack.append(delimiter.join(data))
+                                self.stack.append(list(data))
                             case _:
                                 raise NotImplementedError(expr)
 

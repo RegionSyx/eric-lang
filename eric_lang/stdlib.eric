@@ -3,3 +3,16 @@ splitlines = split("\n")
 first(d) = index(d, 0)
 second(d) = index(d, 1)
 last(d) = index(d, sub(0, 1))
+
+len(x) = pyeval("len(x)")
+slice(d, start, end) = pyeval("d[start:end]")
+
+add(a, b) = pyeval("a + b")
+sub(a, b) = pyeval("a - b")
+mul(a, b) = pyeval("a * b")
+div(a, b) = pyeval("a // b")
+
+join(d, delim) = pyeval("delim.join(d)")
+replace(d, f, to) = pyeval("d.replace(f, to)")
+
+list(d) = pyeval("tuple(d)")
