@@ -2,6 +2,7 @@ splitlines = split("\n")
 
 first(d) = index(d, 0)
 second(d) = index(d, 1)
+third(d) = get(d, 2)
 last(d) = index(d, sub(0, 1))
 
 len(x) = pyeval("len(x)")
@@ -14,5 +15,22 @@ div(a, b) = pyeval("a // b")
 
 join(d, delim) = pyeval("delim.join(d)")
 replace(d, f, to) = pyeval("d.replace(f, to)")
+strip(s) = pyeval("s.strip()")
 
 list(d) = pyeval("tuple(d)")
+
+lte(a, b) = pyeval("a <= b")
+gte(a, b) = pyeval("a >= b")
+lt(a, b) = pyeval("a < b")
+gt(a, b) = pyeval("a > b")
+
+and(a, b) = pyeval("a and b")
+or(a, b) = pyeval("a or b")
+all(d) = pyeval("all(d)")
+any(d) = pyeval("any(d)")
+max(d) = pyeval("max(d)")
+min(d) = pyeval("min(d)")
+
+if(expr, t, f) = pyeval("t if expr else f")
+
+transpose(d) = pyeval("tuple(zip(*d))")

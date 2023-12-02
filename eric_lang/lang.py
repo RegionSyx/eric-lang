@@ -73,7 +73,7 @@ def tokenize(input_string):
     lines = input_string.split("\n")
 
     # Regex to capture tokens within lines
-    line_token_pattern = re.compile(r'("[^"]*"|\w+|\(|\)|\=)')
+    line_token_pattern = re.compile(r'("[^"]*"|\w+|\(|\)|\=|\#)')
     paren_level = 0
 
     for line in lines:
@@ -113,11 +113,15 @@ def tokenize(input_string):
             elif t == ")":
                 paren_level -= 1
 
-        tokens.extend(line_tokens)
+        if line_tokens and not line_tokens[0] == "#":
+            if "#" in line_tokens:
+                line_tokens = line_tokens[: line_tokens.index("#")]
 
-        # ignore newlines when in parenthesis
-        if paren_level == 0:
-            tokens.append("NEWLINE")
+            tokens.extend(line_tokens)
+
+            # ignore newlines when in parenthesis
+            if paren_level == 0:
+                tokens.append("NEWLINE")
 
     if tokens[-1] == "NEWLINE":
         tokens.pop()
@@ -319,8 +323,6 @@ class Interpreter:
 
                     if (expr, *args_as_literals) in self.variables:
                         self.run(self.variables[(expr, *args_as_literals)])
-                        for a in args_as_literals:
-                            self.stack.pop()
                     elif matching_exact_vars:
                         matching = matching_exact_vars[0]
                         func_vars = {}
@@ -377,6 +379,17 @@ class Interpreter:
                                 i = self.stack.pop()
                                 data = self.stack.pop()
                                 self.stack.append(data[i])
+                            case IdentifierNode("get"):
+                                index = self.stack.pop()
+                                data = self.stack.pop()
+                                self.stack.append(data[index])
+                            case IdentifierNode("set"):
+                                item = self.stack.pop()
+                                index = self.stack.pop()
+                                data = list(self.stack.pop())
+
+                                data[index] = item
+                                self.stack.append(tuple(data))
                             case _:
                                 raise NotImplementedError(expr)
 
