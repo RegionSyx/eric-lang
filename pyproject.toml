@@ -1,6 +1,6 @@
 [project]
 name = "eric-lang"
-version = "0.0.3"
+version = "0.0.4"
 authors = [{name="Eric Hurst", email="eric.hurst97@gmail.com" }]
 description = "My own langugae"
 readme = "README.md"
