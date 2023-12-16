@@ -1,0 +1,27 @@
+# Classic fibinocci implementation
+fib(0) = 1
+fib(1) = 1
+fib(x) = add(fib(sub(x, 2)), fib(sub(x, 1)))
+
+
+# Fast fibiniocci implementation using an iterative method
+ffib(0) = 1
+ffib(1) = 1
+ffib(x) =
+    range(2, inc(x))
+    reduce((1, 1))
+        _ as acc, d
+        (second(acc), add(first(acc), second(acc)))
+    second
+_
+
+
+mfib(0) = 1
+mfib(1) = 1
+mfib(x) =
+    memoize(x)
+        add(mfib(sub(x, 2)), mfib(sub(x, 1)))
+    _
+
+mfib(100)
+print

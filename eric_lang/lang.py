@@ -1,6 +1,10 @@
+import multiprocessing
 import os
 import re
 import sys
+import math
+
+from tqdm import tqdm
 
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -16,30 +20,20 @@ class LiteralNode(ASTNode):
 
 
 @dataclass(frozen=True)
-class LiteralStringNode(LiteralNode):
-    value: str
-
-
-@dataclass(frozen=True)
-class LiteralIntNode(LiteralNode):
-    value: int
-
-
-@dataclass(frozen=True)
 class IdentifierNode:
     name: str
 
 
 @dataclass(frozen=True)
 class ExpressionNode(ASTNode):
-    expr: ASTNode
+    identifier: IdentifierNode
     args: Tuple[ASTNode]
 
 
 @dataclass(frozen=True)
 class StatementNode(ASTNode):
     expr: ExpressionNode
-    name: Optional[IdentifierNode]
+    names: List[IdentifierNode]
     block: Optional[ASTNode]
 
 
@@ -55,13 +49,19 @@ class ModuleNode:
 
 @dataclass(frozen=True)
 class AssignmentNode(ASTNode):
-    left: ASTNode
+    left: ExpressionNode
     right: ASTNode
 
 
 @dataclass(frozen=True)
+class CollectionItemNode(ASTNode):
+    item: ASTNode
+    expand: bool
+
+
+@dataclass(frozen=True)
 class CollectionNode(ASTNode):
-    items: Tuple[ASTNode]
+    items: Tuple[CollectionItemNode]
 
 
 def tokenize(input_string):
@@ -73,17 +73,18 @@ def tokenize(input_string):
     lines = input_string.split("\n")
 
     # Regex to capture tokens within lines
-    line_token_pattern = re.compile(r'("[^"]*"|\w+|\(|\)|\=|\#|\|)')
+    line_token_pattern = re.compile(r'("[^"]*"|\w+|-?[0-9]+|\(|\)|\=|\#|\||\,|\.{3})')
     paren_level = 0
 
     for line in lines:
         # Check for empty or whitespace-only lines
-        if not line.strip():
+        if not line.strip() and paren_level == 0:
             if tokens and tokens[-1] == "NEWLINE":
                 tokens.pop()
             if tokens and tokens[-1] != "EMPTY":
                 tokens.append("EMPTY")
             continue
+
         # Ignore indents when in parenthsis
         if paren_level == 0:
             # Measure indentation by the leading whitespace
@@ -98,11 +99,12 @@ def tokenize(input_string):
 
             # If this line's indentation is less, it's one or more dedents
             while indentation < indent_stack[-1]:
-                if tokens[-1] == "NEWLINE":
-                    tokens.pop()
+                t = None
+                if tokens[-1] in ("NEWLINE", "EMPTY"):
+                    t = tokens.pop()
                 indent_stack.pop()
                 tokens.append("DEDENT")
-                tokens.append("NEWLINE")
+                tokens.append(t or "NEWLINE")
 
         # Tokenize the rest of the line
         line_tokens = line_token_pattern.findall(line.lstrip(" "))
@@ -130,9 +132,14 @@ def tokenize(input_string):
         tokens.pop()
     # End of input - dedent back to the base level
     for _ in indent_stack[1:]:  # Skip the base level
+        t = None
+        if tokens[-1] in ("NEWLINE", "EMPTY"):
+            t = tokens.pop()
+        indent_stack.pop()
         tokens.append("DEDENT")
+        tokens.append(t or "NEWLINE")
 
-    while tokens[-1] == "EMPTY":
+    while tokens[-1] in ("EMPTY", "NEWLINE"):
         del tokens[-1]
     return tokens
 
@@ -144,6 +151,9 @@ class Parser:
 
     def next(self):
         self.current = next(self.tokens, None)
+
+    def peek(self, token):
+        return self.current == token
 
     def accept(self, token):
         if self.current == token:
@@ -165,19 +175,34 @@ class Parser:
     def list(self):
         self.expect("(")
         items = []
-        items.append(self.expr())
-        while not self.accept(")"):
-            items.append(self.expr())
+        if self.accept(")"):
+            return CollectionNode(items=tuple())
 
+        if self.accept("..."):
+            items.append(CollectionItemNode(item=self.expr(), expand=True))
+        else:
+            items.append(CollectionItemNode(item=self.expr(), expand=False))
+        while self.accept(","):
+            if self.current == ")":
+                break
+            if self.accept("..."):
+                items.append(CollectionItemNode(item=self.expr(), expand=True))
+            else:
+                items.append(CollectionItemNode(item=self.expr(), expand=False))
+        self.expect(")")
         return CollectionNode(items=tuple(items))
 
     def literal(self):
         token: str = self.current
+        if not token:
+            raise Exception("Error when parsing literal, end of file")
         if token == "true":
             node = LiteralNode(True)
         elif token == "false":
             node = LiteralNode(False)
         elif token.isnumeric():
+            node = LiteralNode(int(token))
+        elif token.startswith("-") and token[1:].isnumeric():
             node = LiteralNode(int(token))
         elif token.startswith('"') and token.endswith('"'):
             node = LiteralNode(token.strip('"'))
@@ -197,25 +222,29 @@ class Parser:
             return literal
 
         args = []
-        if self.accept("("):
-            while not self.accept(")"):
-                args.append(self.expr())
-                self.accept(",")
+        if self.peek("("):
+            args = [x.item for x in self.list().items]
 
-        return ExpressionNode(expr=literal, args=tuple(args))
+        return ExpressionNode(identifier=literal, args=tuple(args))
 
     def stmt(self):
         block = None
-        name = None
+        names = []
         expr = self.expr()
         if self.accept("="):
-            expr = AssignmentNode(left=expr, right=self.expr())
+            if self.accept("INDENT"):
+                expr = AssignmentNode(left=expr, right=self.module())
+                self.expect("DEDENT")
+            else:
+                expr = AssignmentNode(left=expr, right=self.expr())
         if self.accept("as"):
-            name = self.identifier()
+            names.append(self.identifier())
+            while self.accept(","):
+                names.append(self.identifier())
         if self.accept("INDENT"):
             block = self.module()
             self.expect("DEDENT")
-        return StatementNode(expr=expr, block=block, name=name)
+        return StatementNode(expr=expr, block=block, names=names)
 
     def block(self):
         stmts = []
@@ -237,6 +266,16 @@ class Parser:
         return module
 
 
+def process(args):
+    d, variables, stack, block = args
+    sub_interpretor = Interpreter(variables.copy(), stack + [d])
+    result = sub_interpretor.run(block)
+    return result
+
+
+memo = {}
+
+
 class Interpreter:
     def __init__(self, variables=None, stack=None):
         if not variables:
@@ -247,8 +286,6 @@ class Interpreter:
             stack = []
         self.stack = stack.copy()
 
-        self.commands = ["split", "int"]
-
     def run(self, ast_node):
         match ast_node:
             case ModuleNode(blocks):
@@ -257,11 +294,11 @@ class Interpreter:
             case BlockNode(stmts):
                 for stmt in stmts:
                     self.run(stmt)
-            case StatementNode(expr, name, block):
+            case StatementNode(expr, names, block):
                 if (
                     isinstance(expr, ExpressionNode)
-                    and isinstance(expr.expr, IdentifierNode)
-                    and expr.expr.name == "reduce"
+                    and isinstance(expr.identifier, IdentifierNode)
+                    and expr.identifier.name == "reduce"
                 ):
                     data = self.stack.pop()
                     if not block:
@@ -270,10 +307,64 @@ class Interpreter:
                     result = self.stack.pop()
                     for d in data:
                         sub_interpretor = Interpreter(
-                            self.variables.copy(), self.stack + [result, d]
+                            self.variables.copy(), self.stack + [(result, d)]
                         )
                         result = sub_interpretor.run(block)
                     self.stack.append(result)
+                elif (
+                    isinstance(expr, ExpressionNode)
+                    and isinstance(expr.identifier, IdentifierNode)
+                    and expr.identifier.name == "filter"
+                ):
+                    data = self.stack.pop()
+                    if not block:
+                        raise Exception("Block expected in reduce")
+                    results = []
+                    for d in data:
+                        sub_interpretor = Interpreter(
+                            self.variables.copy(), self.stack + [d]
+                        )
+                        result = sub_interpretor.run(block)
+                        if result is True:
+                            results.append(d)
+                    self.stack.append(tuple(results))
+                elif (
+                    isinstance(expr, ExpressionNode)
+                    and isinstance(expr.identifier, IdentifierNode)
+                    and expr.identifier.name == "parallel"
+                ):
+                    data = self.stack.pop()
+                    if not block:
+                        raise Exception("Block expected in reduce")
+                    self.run(expr.args[0].item)
+                    cores = self.stack.pop()
+
+                    args = [
+                        (d, self.variables.copy(), self.stack.copy(), block)
+                        for d in data
+                    ]
+                    pool = multiprocessing.Pool(cores)
+                    results = pool.map(process, args)
+                    self.stack.append(tuple(results))
+                elif (
+                    isinstance(expr, ExpressionNode)
+                    and isinstance(expr.identifier, IdentifierNode)
+                    and expr.identifier.name == "memoize"
+                ):
+                    if not block:
+                        raise Exception("Block expected in memo")
+                    self.run(expr.args[0].item)
+                    key = self.stack.pop()
+
+                    if key in memo:
+                        self.stack.append(memo[key])
+                    else:
+                        sub_interpretor = Interpreter(
+                            self.variables.copy(), self.stack.copy()
+                        )
+                        result = sub_interpretor.run(block)
+                        self.stack.append(result)
+                        memo[key] = result
                 else:
                     self.run(expr)
                     if block:
@@ -284,30 +375,67 @@ class Interpreter:
                             )
                             results.append(sub_interpretor.run(block))
                         self.stack.append(tuple(results))
-                if name:
-                    self.variables[(name,)] = LiteralNode(value=self.stack[-1])
+                if names:
+                    if len(names) == 1:
+                        name = names[0]
+                        self.variables[(name,)] = LiteralNode(value=self.stack[-1])
+                    else:
+                        values = self.stack[-1]
+
+                        if len(values) != len(names):
+                            raise Exception(
+                                "As name expansion did not match number of values"
+                            )
+
+                        for name, value in zip(names, values):
+                            self.variables[(name,)] = LiteralNode(value=value)
 
             case AssignmentNode(left, right):
                 if isinstance(left, IdentifierNode):
                     self.variables[(left,)] = right
                 elif isinstance(left, ExpressionNode):
-                    full_ident = (left.expr, *left.args)
+                    full_ident = (left.identifier, *left.args)
                     self.variables[full_ident] = right
 
             case CollectionNode(items):
                 results = []
                 for item in items:
-                    self.run(item)
+                    self.run(item.item)
                     result = self.stack.pop()
-                    results.append(result)
+                    if item.expand:
+                        results.extend(result)
+                    else:
+                        results.append(result)
 
                 self.stack.append(tuple(results))
 
-            case ExpressionNode(expr, args):
-                if isinstance(expr, LiteralNode):
-                    return self.run(expr)
-                elif (expr,) in self.variables:
-                    self.run(self.variables[(expr,)])
+            case ExpressionNode(identifier, args):
+                if isinstance(identifier, LiteralNode):
+                    return self.run(identifier)
+                elif (identifier,) in self.variables:
+                    self.run(self.variables[(identifier,)])
+                elif identifier.name == "if":
+                    if len(args) == 3:
+                        condition = self.run(args[0])
+                        if condition:
+                            self.run(args[1])
+                        else:
+                            self.run(args[2])
+                    elif len(args) == 2:
+                        condition = self.stack.pop()
+                        if condition:
+                            self.run(args[0])
+                        else:
+                            self.run(args[1])
+                elif identifier.name == "cond":
+                    for i in range(0, len(args), 2):
+                        condition, body = args[i], args[i+1]
+                        if self.run(condition):
+                            self.run(body)
+                            break
+                    else:
+                        raise Exception("No condition matches")
+
                 else:
                     args_as_literals = []
                     top = None
@@ -319,13 +447,14 @@ class Interpreter:
                     matching_exact_vars = [
                         x
                         for x in self.variables
-                        if x[0] == expr
+                        if x[0] == identifier
                         and all([isinstance(x, ExpressionNode) for x in x[1:]])
                         and (len(x) == len(args) + 1 or len(x) == len(args) + 2)
                     ]
-
-                    if (expr, *args_as_literals) in self.variables:
-                        self.run(self.variables[(expr, *args_as_literals)])
+                    if (identifier, *args_as_literals) in self.variables:
+                        self.run(self.variables[(identifier, *args_as_literals)])
+                    elif (identifier, *args_as_literals) in memo:
+                        self.run(memo[(identifier, *args_as_literals)])
                     elif matching_exact_vars:
                         matching = matching_exact_vars[0]
                         func_vars = {}
@@ -334,15 +463,17 @@ class Interpreter:
                         for func_args, literal_arg in zip(
                             reversed(matching[1:]), reversed(args_as_literals)
                         ):
-                            func_vars[(func_args.expr,)] = literal_arg
+                            func_vars[(func_args.identifier,)] = literal_arg
                             self.stack.pop()
 
                         sub_interpretor = Interpreter(
                             {**self.variables, **func_vars}, self.stack
                         )
-                        self.stack.append(sub_interpretor.run(self.variables[matching]))
+                        result = sub_interpretor.run(self.variables[matching])
+
+                        self.stack.append(result)
                     else:
-                        match expr:
+                        match identifier:
                             case IdentifierNode("_"):
                                 pass
                             case IdentifierNode("_1"):
@@ -351,13 +482,13 @@ class Interpreter:
                                 self.stack.append(self.stack[-2])
                             case IdentifierNode("pyeval"):
                                 code = self.stack.pop()
+                                variables = {
+                                    k[0].name: v.value
+                                    for k, v in self.variables.items()
+                                    if isinstance(v, LiteralNode)
+                                }
                                 result = eval(
-                                    code,
-                                    {
-                                        k[0].name: v.value
-                                        for k, v in self.variables.items()
-                                        if isinstance(v, LiteralNode)
-                                    },
+                                    code, {"math": math, "tqdm": tqdm, **variables}
                                 )
                                 self.stack.append(result)
                             case IdentifierNode("stdin"):
@@ -378,23 +509,36 @@ class Interpreter:
                                 print(self.stack[-1])
                             case IdentifierNode("sum"):
                                 self.stack.append(sum(self.stack.pop()))
-                            case IdentifierNode("index"):
-                                i = self.stack.pop()
-                                data = self.stack.pop()
-                                self.stack.append(data[i])
                             case IdentifierNode("get"):
                                 index = self.stack.pop()
                                 data = self.stack.pop()
                                 self.stack.append(data[index])
+                            case IdentifierNode("getd"):
+                                default = self.stack.pop()
+                                index = self.stack.pop()
+                                data = self.stack.pop()
+                                self.stack.append(
+                                    data[index] if index < len(data) else default
+                                )
                             case IdentifierNode("set"):
                                 item = self.stack.pop()
                                 index = self.stack.pop()
-                                data = list(self.stack.pop())
-
-                                data[index] = item
-                                self.stack.append(tuple(data))
+                                data = self.stack.pop()
+                                self.stack.append(
+                                    data[:index] + (item,) + data[index + 1 :]
+                                )
+                            case IdentifierNode("remove"):
+                                index = self.stack.pop()
+                                data = self.stack.pop()
+                                self.stack.append(data[:index] + data[index + 1 :])
+                            case IdentifierNode("append"):
+                                item = self.stack.pop()
+                                data = self.stack.pop()
+                                self.stack.append(data + (item,))
                             case _:
-                                raise NotImplementedError(expr)
+                                raise NotImplementedError(
+                                    (identifier, *args_as_literals)
+                                )
 
             case LiteralNode(value):
                 self.stack.append(value)

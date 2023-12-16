@@ -1,21 +1,46 @@
 splitlines = split("\n")
 
-first(d) = index(d, 0)
-second(d) = index(d, 1)
+first(d) = get(d, 0)
+second(d) = get(d, 1)
 third(d) = get(d, 2)
-last(d) = index(d, sub(0, 1))
+last(d) = get(d, sub(0, 1))
 
+index(d, v) = pyeval("d.index(v)")
+
+range(a, b) = pyeval("tuple(range(a, b))")
 len(x) = pyeval("len(x)")
 slice(d, start, end) = pyeval("d[start:end]")
+distinct(x) = pyeval("tuple(set(x))")
+intersect(a, b) = pyeval("tuple(set(a).intersection(b))")
+enumerate(d) = pyeval("tuple(enumerate(d))")
+flatten(d) = pyeval("tuple([item for row in d for item in row])")
+sort(x) = pyeval("tuple(sorted(x))")
+reverse(x) = pyeval("tuple(reversed(x))")
+append(d, x) = (...d, x)
+prepend(d, x) = (x, ...d)
+extend(a, b) = (...a, ...b)
+tail(l) = slice(l, 1, len(l))
+
 
 add(a, b) = pyeval("a + b")
 sub(a, b) = pyeval("a - b")
 mul(a, b) = pyeval("a * b")
-div(a, b) = pyeval("a // b")
+div(a, b) = pyeval("a / b")
+idiv(a, b) = pyeval("a // b")
+
+ceil(x) = pyeval("math.ceil(x)")
+floor(x) = pyeval("math.floor(x)")
+sqrt(x) = pyeval("math.sqrt(x)")
+abs(x) = pyeval("abs(x)")
+neg(x) = sub(0, x)
+inc(x) = add(x, 1)
+gcd(a, b) = pyeval("math.gcd(a, b)")
 
 join(d, delim) = pyeval("delim.join(d)")
 replace(d, f, to) = pyeval("d.replace(f, to)")
 strip(s) = pyeval("s.strip()")
+strip(s, v) = pyeval("s.strip(v)")
+isdigit(s) = pyeval("s.isdigit()")
 
 list(d) = pyeval("tuple(d)")
 
@@ -23,9 +48,11 @@ lte(a, b) = pyeval("a <= b")
 gte(a, b) = pyeval("a >= b")
 lt(a, b) = pyeval("a < b")
 gt(a, b) = pyeval("a > b")
+eq(a, b) = pyeval("a == b")
 
 and(a, b) = pyeval("a and b")
 or(a, b) = pyeval("a or b")
+not(x) = pyeval("not(x)")
 all(d) = pyeval("all(d)")
 any(d) = pyeval("any(d)")
 max(d) = pyeval("max(d)")
@@ -33,4 +60,15 @@ min(d) = pyeval("min(d)")
 
 if(expr, t, f) = pyeval("t if expr else f")
 
-transpose(d) = pyeval("tuple(zip(*d))")
+transpose(d) = pyeval("tuple([tuple(i) for i in zip(*d)])")
+
+contains(l, x) = pyeval("x in l")
+
+map_build(l) = transpose(l)
+map_append(m, k, v) = ((...first(m), k), (...second(m), v))
+map_get(m, k) = get(second(m), index(first(m), k))
+map_contains(m, k) = contains(first(m), k)
+
+progress(l) = pyeval("tqdm(l)")
+ord(c) = pyeval("ord(c)")
+mod(d, x) = pyeval("d % x")
